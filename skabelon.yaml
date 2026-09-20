@@ -1,0 +1,67 @@
+# Skabelonens eget kort over sig selv.
+#
+# Posten i website-mcp's skabeloner.yaml er den, agenten slår op i, og den pinner
+# version og sha256. Filen her siger hvad skabelonen ER, hvilke trin der skal være
+# grønne, og hvilke domæner byggetrinnet har brug for i egress-listen. De to filer skal
+# sige det samme; prøven tests/test_skabelon.py holder øje med denne side.
+
+navn: site-basis
+version: 0.1.0
+
+beskrivelse: >-
+  React 18 og Vite i web/, FastAPI og SQLite i api/, login med session i en cookie, og
+  en gate der kører de samme trin som agentens. Det, en Byg selv-kunde starter med.
+
+# sha256 af udgivelsens tarball fyldes ind i website-mcp's skabeloner.yaml, ikke her.
+# Den kan ikke stå i filen selv: filen er en del af det, der bliver hashet.
+
+krav:
+  node: "22"
+  python: "3.12"
+
+gate:
+  byg:
+    - navn: web-afhaengigheder
+      mappe: web
+      kommando: [npm, ci]
+    - navn: web-build
+      mappe: web
+      kommando: [npm, run, build]
+  test:
+    - navn: api-afhaengigheder
+      mappe: api
+      kommando: [uv, sync, --frozen]
+    - navn: api-tests
+      mappe: api
+      kommando: [uv, run, pytest, -q]
+    - navn: web-tests
+      mappe: web
+      kommando: [npm, run, test]
+  lint:
+    - navn: api-lint
+      mappe: api
+      kommando: [uv, run, ruff, check, .]
+    - navn: web-lint
+      mappe: web
+      kommando: [npm, run, lint]
+
+# Værterne byggetrinnet skal kunne nå gennem proxyen i VM'en. Listen i
+# scripts/vm/squid.conf er den, der håndhæver; den her siger hvad skabelonen kræver.
+egress:
+  - registry.npmjs.org
+  - pypi.org
+  - files.pythonhosted.org
+  - github.com
+  - codeload.github.com
+  - objects.githubusercontent.com
+  - registry-1.docker.io
+  - auth.docker.io
+  - production.cloudflare.docker.com
+  - ghcr.io
+  - pkg-containers.githubusercontent.com
+
+# Felterne til version 2. Læse-API'et mod website-mcp er ikke med i version 1:
+# api/indhold.py leverer statisk indhold, og klienten er første punkt på v2-listen.
+indhold:
+  kilde: statisk
+  api: null

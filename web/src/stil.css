@@ -1,0 +1,70 @@
+/* Al CSS ligger lokalt. Ingen fonte eller stilark fra fremmede domæner: de kan ikke
+   nås gennem proxyen, og de fortæller andre hvem der besøger sitet. */
+:root {
+  color-scheme: light dark;
+  --grund: #ffffff;
+  --blaek: #14171a;
+  --accent: #1d4ed8;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grund: #0f1115;
+    --blaek: #f2f4f7;
+    --accent: #7aa2ff;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--grund);
+  color: var(--blaek);
+}
+
+.ramme {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 1.5rem 1rem 4rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.blok-knap {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: var(--grund);
+  text-decoration: none;
+}
+
+.blok-billede img {
+  max-width: 100%;
+  height: auto;
+}
+
+.log-ind {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 22rem;
+}
+
+.log-ind input {
+  padding: 0.5rem;
+  font: inherit;
+}
+
+[role='alert'] {
+  color: #b42318;
+}

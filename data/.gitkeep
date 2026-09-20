@@ -1,0 +1,5 @@
+Mappen skal findes, FØR compose starter.
+
+Er den ikke der, laver docker den som root, og api-containeren kører ikke som root og
+kan derfor ikke skrive i den. Databasen og sessionshemmeligheden bliver liggende her og
+kommer aldrig i git.

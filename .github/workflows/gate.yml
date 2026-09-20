@@ -1,0 +1,121 @@
+# Gaten, kørt af GitHub. Trinnene er de samme som dem, workspace-agenten kører i
+# kundens VM (BYGSELV-DESIGN.md kap. 7.3), så skabelonen kan bevise sig selv uden et
+# workspace.
+#
+# De to trin agenten kører, og som ikke kan køre her, er nævnt til sidst: vagtens
+# regelmotor ligger i website-mcp og er ikke offentlig.
+
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Hent koden
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: uv og python
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.11.3"
+          python-version: "3.12"
+
+      # ---------------------------------------------------------------- trin 2: byg
+      - name: Frontend, afhængigheder
+        working-directory: web
+        run: npm ci
+
+      - name: Frontend, build
+        working-directory: web
+        run: npm run build
+
+      # -------------------------------------------------------------- trin 3: tests
+      - name: API, afhængigheder
+        working-directory: api
+        run: uv sync --frozen
+
+      - name: API, tests
+        working-directory: api
+        run: uv run pytest -q -p no:warnings
+
+      - name: Frontend, tests
+        working-directory: web
+        run: npm run test
+
+      # --------------------------------------------------------------- trin 4: lint
+      - name: API, lint
+        working-directory: api
+        run: uv run ruff check . && uv run ruff format --check .
+
+      - name: Frontend, lint
+        working-directory: web
+        run: npm run lint
+
+      # ----------------------------------------------------------- trin 5: gitleaks
+      - name: Hemmeligheder
+        run: |
+          set -euo pipefail
+          udgave=8.30.1
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${udgave}/gitleaks_${udgave}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --no-git --redact --source . --exit-code 1
+          rm -f gitleaks gitleaks.tar.gz
+
+      # --------------------------------------------------- trin 6: afhængigheder
+      # Advarsler, aldrig en blokering. En ny CVE i en transitiv afhængighed må ikke
+      # låse nogen ude fra sin egen udgivelse klokken 23. Den skal ses, hver gang.
+      - name: Python-afhængigheder
+        continue-on-error: true
+        working-directory: api
+        run: uvx pip-audit --progress-spinner off -r requirements.txt
+
+      - name: Node-afhængigheder
+        continue-on-error: true
+        working-directory: web
+        run: npm audit --audit-level=high
+
+      # ----------------------------------------------- trin 1, 8 og 9: rent træ mv.
+      # Dockerfile- og migrationstjekket ligger i tests/ og er kørt ovenfor sammen
+      # med resten af pytest. Her tjekkes kun, at byggetrinnene ikke efterlod
+      # ændringer: gaten hænger på et commit, og et snavset træ gør den rød.
+      - name: Rent træ
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Byggetrinnene efterlod ændringer i træet:"
+            git status --porcelain
+            exit 1
+          fi
+
+      # --------------------------------------------------------------- trin 7: vagten
+      # Vagtens regelmotor ligger i website-mcp og kan ikke importeres her. Den kører
+      # i kundens workspace ved hver gate, og i ufi-tech's egen kontrol før en ny
+      # version af skabelonen tagges:
+      #   VAGT_MODUL=<website-mcp> VAGT_REGLER=<.../regler.yaml> uv run pytest -q
+      - name: Vagten
+        run: echo "Vagten kører i workspacet og i ufi-tech's kontrol. Se tests/test_vagten.py."

@@ -1,0 +1,42 @@
+# Produktion. Lægges OVEN PÅ docker-compose.yml og kører som projektet ws-prod.
+#
+# Filen gentager mem_limit, pids_limit og user med vilje: agenten validerer HVER
+# compose-fil for sig, før den lader docker flette dem, så en overlay-fil skal kunne
+# stå alene og stadig overholde reglerne.
+#
+# Data ligger i /srv/prod-data, som er ejet af root og IKKE af ws. Kundens AI kan
+# derfor ikke slette kundens egen produktion. Mappen skal tilhøre 10001:10001 (den
+# bruger api-billedet kører som) med rettighederne 750.
+#
+# SESSION_HEMMELIGHED kan sættes i miljøet. Er den tom, laver appen selv en og gemmer
+# den i datamappen med rettighederne 600. Der står aldrig en hemmelighed i repoet.
+
+services:
+  api:
+    environment:
+      APP_MILJOE: produktion
+      DATABASE_URL: sqlite:///./data/app.db
+      SESSION_HEMMELIGHED: ${SESSION_HEMMELIGHED:-}
+    volumes:
+      - /srv/prod-data:/app/data
+    user: "10001:10001"
+    restart: unless-stopped
+    mem_limit: 768m
+    pids_limit: 256
+
+  web:
+    ports:
+      - "127.0.0.1:8081:8080"
+    user: "101:101"
+    restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 128
+
+networks:
+  internt:
+    name: site-basis-prod
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.17.0/24

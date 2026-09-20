@@ -1,0 +1,69 @@
+# Udvikling. Preview binder 127.0.0.1:8080, og det er den eneste port der er åben.
+#
+# HVORFOR FILEN SER SÅDAN UD:
+#
+# - `mem_limit` og `pids_limit` står på hver tjeneste. Uden dem afviser agentens
+#   compose-værn filen, og uden dem kan én container tage hele maskinens hukommelse
+#   eller proces-tabel.
+# - `user` står på hver tjeneste. Containeren kører aldrig som root.
+# - Porten er bundet til 127.0.0.1. Trafikken kommer ind gennem tunnelen og ingen
+#   andre steder fra.
+# - Netværket er navngivet og har et kendt subnet inde i 172.20.0.0/16. Brandmuren i
+#   VM'en tillader netop det område container til container og videre til proxyen.
+# - Proxyen står både som miljø og som byggeargument. En container kan ikke nå VM'ens
+#   loopback, så uden begge dele fejler `npm ci` og `pip install` i byggetrinnet.
+#
+# APP_UID og APP_GID skal være den bruger der ejer repoet, så api-tjenesten kan skrive
+# i data/. Se .env.example.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+        HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+        NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
+    environment:
+      APP_MILJOE: udvikling
+      DATABASE_URL: sqlite:///./data/app.db
+      HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+      HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
+    volumes:
+      - ./data:/app/data
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    restart: "no"
+    mem_limit: 512m
+    pids_limit: 256
+    networks:
+      - internt
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+        HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+        NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8080:8080"
+    user: "101:101"
+    restart: "no"
+    mem_limit: 256m
+    pids_limit: 128
+    networks:
+      - internt
+
+networks:
+  internt:
+    name: site-basis-dev
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.16.0/24

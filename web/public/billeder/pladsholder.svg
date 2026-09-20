@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Pladsholder">
+  <rect width="640" height="360" fill="#e7eaf0"/>
+  <rect x="24" y="24" width="592" height="312" fill="none" stroke="#9aa5b8" stroke-width="2" stroke-dasharray="10 8"/>
+  <text x="320" y="196" font-family="system-ui, sans-serif" font-size="28" fill="#5b6679" text-anchor="middle">Skift billedet ud</text>
+</svg>

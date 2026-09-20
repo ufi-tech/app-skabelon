@@ -1,0 +1,41 @@
+[project]
+name = "app-skabelon-api"
+version = "0.1.0"
+description = "API-delen af skabelonen site-basis: FastAPI, SQLite og sessionslogin."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.53.0",
+    "sqlalchemy==2.0.54",
+    "alembic==1.20.0",
+    "itsdangerous==2.2.0",
+    "bcrypt==5.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "httpx==0.28.1",
+    "ruff==0.16.8",
+    "pyyaml==6.0.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's hele mønster er Depends() i et standardargument. Uden den her linje
+# melder B008 fejl på hver eneste rute, og så lærer man at se bort fra lint.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body", "fastapi.Path"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "../tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"

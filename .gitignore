@@ -1,0 +1,26 @@
+# Byggede ting og afhængigheder. De hører ikke i git, og et snavset træ gør gaten rød.
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.tsbuildinfo
+
+# Data og hemmeligheder. Databasen og sessionshemmeligheden laves ved kørsel og bliver
+# på maskinen. Miljøfiler ligger på serveren, aldrig her.
+data/*
+!data/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+session-hemmelighed
+
+# Operativsystemets egne filer
+.DS_Store
+Thumbs.db
