@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: uv og python
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           version: "0.11.3"
           python-version: "3.12"
