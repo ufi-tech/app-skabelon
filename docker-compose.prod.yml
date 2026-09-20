@@ -1,36 +1,86 @@
-# Produktion. Lægges OVEN PÅ docker-compose.yml og kører som projektet ws-prod.
+# Produktion. Filen står ALENE: agenten kører `docker compose -f docker-compose.prod.yml`
+# uden docker-compose.yml under.
 #
-# Filen gentager mem_limit, pids_limit og user med vilje: agenten validerer HVER
-# compose-fil for sig, før den lader docker flette dem, så en overlay-fil skal kunne
-# stå alene og stadig overholde reglerne.
+# HVORFOR DEN STÅR ALENE OG IKKE SOM ET OVERLAY
 #
-# Data ligger i /srv/prod-data, som er ejet af root og IKKE af ws. Kundens AI kan
-# derfor ikke slette kundens egen produktion. Mappen skal tilhøre 10001:10001 (den
-# bruger api-billedet kører som) med rettighederne 750.
+# Docker fletter compose-filer felt for felt med hver sin regel: `ports` og `volumes`
+# lægges sammen, `environment` flettes nøgle for nøgle, og en liste kan kun erstattes med
+# YAML-taggene !override og !reset. Agentens eget compose-værn læser hver fil med
+# yaml.safe_load, som rejser på et ukendt tag, så de to tags kan ikke bruges her. Det
+# betød at produktionen arvede ting fra basis-filen, som den ikke skal have: dens
+# volumes-linje `./data:/app/data` peger på repoet, mens produktionen skal have
+# /srv/prod-data.
 #
-# SESSION_HEMMELIGHED kan sættes i miljøet. Er den tom, laver appen selv en og gemmer
-# den i datamappen med rettighederne 600. Der står aldrig en hemmelighed i repoet.
+# Prisen er at filen gentager det meste af docker-compose.yml. Det er med vilje: en
+# produktion skal kunne læses i sin helhed i én fil, og prøven
+# tests/test_skabelon.py::test_prod_og_dev_deler_ingen_vaertsport holder de to miljøer
+# fra hinanden.
+#
+# HVAD DER ER ANDERLEDES END UDVIKLING:
+#
+# - Data ligger i /srv/prod-data, som er ejet af 10001:10001 (den bruger api-billedet
+#   kører som) med rettighederne 750. Mappen er IKKE ejet af ws, så kundens AI kan ikke
+#   slette kundens egen produktion.
+# - `restart: unless-stopped`: produktionen kommer op igen efter en genstart af VM'en.
+# - Porten er 8081 på 127.0.0.1. Preview bruger 8080. De to må aldrig være ens.
+# - Netværket hedder site-basis-prod og har sit eget subnet, så en preview-container og
+#   en produktionscontainer ikke ligger på det samme net.
+#
+# HEMMELIGHEDER: /srv/prod-env/app.env læses som env_file, hvis filen findes. Den
+# skrives af en operatør fra ufi-tech (ws_opret.py --prod-env) og er root:ws 640, så ws
+# kan læse den, men ikke ændre den. Er filen tom eller uden en SESSION_HEMMELIGHED,
+# laver appen selv en og gemmer den i datamappen med rettighederne 600. Der står aldrig
+# en hemmelighed i repoet.
 
 services:
   api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+        HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+        NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
+    env_file:
+      # Appens egne hemmeligheder, skrevet af en operatør fra ufi-tech. Filen er root:ws
+      # 640, så ws kan læse den, men ikke ændre den. required: false, fordi en ny kunde
+      # ikke nødvendigvis har hemmeligheder endnu.
+      - path: /srv/prod-env/app.env
+        required: false
     environment:
       APP_MILJOE: produktion
       DATABASE_URL: sqlite:///./data/app.db
       SESSION_HEMMELIGHED: ${SESSION_HEMMELIGHED:-}
+      HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+      HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
     volumes:
       - /srv/prod-data:/app/data
     user: "10001:10001"
     restart: unless-stopped
     mem_limit: 768m
     pids_limit: 256
+    networks:
+      - internt
 
   web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-http://172.20.0.1:3128}
+        HTTPS_PROXY: ${HTTPS_PROXY:-http://172.20.0.1:3128}
+        NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
+    depends_on:
+      - api
     ports:
       - "127.0.0.1:8081:8080"
     user: "101:101"
     restart: unless-stopped
     mem_limit: 256m
     pids_limit: 128
+    networks:
+      - internt
 
 networks:
   internt:

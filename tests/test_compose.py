@@ -19,8 +19,13 @@ DEV_OVERLAY = REPO / "docker-compose.dev.yml"
 PROD_OVERLAY = REPO / "docker-compose.prod.yml"
 
 #: De to projekter, praecis som workspace_agent/docker.py COMPOSE_FILER starter dem.
+#:
+#: PRODUKTIONEN STAAR ALENE. Compose fletter `ports` og `volumes` ved at laegge sammen,
+#: og en arvet liste kan kun erstattes med !override/!reset, som agentens eget
+#: compose-vaern (yaml.safe_load) rejser paa. Med basis-filen under fik produktionen
+#: BAADE 8080 og 8081 paa web, og baade ./data og /srv/prod-data paa api.
 DEV_FILER = (BASIS, DEV_OVERLAY)
-PROD_FILER = (BASIS, PROD_OVERLAY)
+PROD_FILER = (PROD_OVERLAY,)
 
 #: Alle filer, hver for sig. Agenten validerer dem enkeltvis foer den fletter.
 ALLE = (BASIS, DEV_OVERLAY, PROD_OVERLAY)
@@ -126,7 +131,7 @@ def test_basis_udstiller_ingen_porte() -> None:
 
 
 def test_det_flettede_dev_binder_kun_8080_og_prod_kun_8081() -> None:
-    """Måler det FLETTEDE resultat, ikke de to filer hver for sig.
+    """Måler det resultat agenten faktisk starter, ikke filerne hver for sig.
 
     Den gamle prøve målte kun hver fil alene og gav derfor falsk tryghed: den ville stå
     grøn, selv hvis produktionen endte med både 8080 og 8081 og dermed slog preview ihjel.
@@ -153,7 +158,42 @@ def test_dev_starter_ikke_sig_selv_igen() -> None:
 
 def test_produktionen_gemmer_data_uden_for_hjemmemappen() -> None:
     api = _tjenester(PROD_OVERLAY)["api"]
-    assert "/srv/prod-data:/app/data" in [str(b) for b in api["volumes"]]
+    binds = [str(b) for b in api["volumes"]]
+    assert "/srv/prod-data:/app/data" in binds
+    assert not any(b.startswith("./data") for b in binds), "repoets data-mappe må ikke følge med"
+
+
+def test_produktionsfilen_kan_staa_alene() -> None:
+    """Agenten starter ws-prod med KUN docker-compose.prod.yml.
+
+    Filen skal derfor selv have alt: begge tjenester, deres build, deres netværk. Mangler
+    noget, starter produktionen ikke, og fejlen kommer først i VM'en.
+    """
+    tjenester = _tjenester(PROD_OVERLAY)
+    assert set(tjenester) == {"api", "web"}
+    for navn, tjeneste in tjenester.items():
+        byg = tjeneste.get("build")
+        assert isinstance(byg, dict), f"{navn} i prod-filen bygger ikke fra en Dockerfile"
+        for noegle in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"):
+            assert noegle in (byg.get("args") or {}), f"{navn} mangler byggeargumentet {noegle}"
+        assert tjeneste.get("networks"), f"{navn} i prod-filen er ikke på et netværk"
+    assert (_laes(PROD_OVERLAY).get("networks") or {}), "prod-filen mangler netværksdefinitionen"
+
+
+def test_produktionen_laeser_appens_hemmeligheder_fra_en_fil_uden_for_repoet() -> None:
+    """/srv/prod-build er et frisk worktree ved hver udgivelse.
+
+    Hverken en .env i projektmappen eller en utracked fil overlever, så en rigtig ekstern
+    nøgle har kun én vej ind: operatørens fil. Den er root:ws 640, og required: false,
+    så en ny kunde uden hemmeligheder stadig kan starte.
+    """
+    api = _tjenester(PROD_OVERLAY)["api"]
+    poster = api.get("env_file") or []
+    stier = [p.get("path") if isinstance(p, dict) else str(p) for p in poster]
+    assert "/srv/prod-env/app.env" in stier
+    for post in poster:
+        if isinstance(post, dict) and post.get("path") == "/srv/prod-env/app.env":
+            assert post.get("required") is False
 
 
 def test_netvaerket_er_navngivet_med_et_kendt_subnet() -> None:

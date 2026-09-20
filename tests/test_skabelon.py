@@ -12,7 +12,7 @@ SKABELON = yaml.safe_load((REPO / "skabelon.yaml").read_text(encoding="utf-8"))
 
 def test_navn_og_version() -> None:
     assert SKABELON["navn"] == "site-basis"
-    assert SKABELON["version"] == "0.1.1"
+    assert SKABELON["version"] == "0.1.2"
 
 
 def test_gate_kommandoerne_findes_som_scripts() -> None:

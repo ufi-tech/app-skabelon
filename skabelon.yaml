@@ -6,7 +6,7 @@
 # sige det samme; prøven tests/test_skabelon.py holder øje med denne side.
 
 navn: site-basis
-version: 0.1.1
+version: 0.1.2
 
 beskrivelse: >-
   React 18 og Vite i web/, FastAPI og SQLite i api/, login med session i en cookie, og
@@ -41,6 +41,12 @@ gate:
     - navn: api-lint
       mappe: api
       kommando: [uv, run, ruff, check, .]
+    # Formatteringen er et eget trin. `ruff check` ser den ikke, og uden trinnet her
+    # driver formatteringen stille fra hinanden, indtil en dag hvor en diff er umulig
+    # at læse, fordi halvdelen af linjerne kun er ombrudt.
+    - navn: api-format
+      mappe: api
+      kommando: [uv, run, ruff, format, --check, .]
     - navn: web-lint
       mappe: web
       kommando: [npm, run, lint]

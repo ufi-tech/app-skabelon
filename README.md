@@ -11,9 +11,9 @@ Alt i repoet er tænkt som noget, der skal rettes i. Det er meningen, at du bygg
 ```
 app-skabelon/
   skabelon.yaml            navn, version, gate-trin og egress-domæner
-  docker-compose.yml       basis, udstiller ingen port
-  docker-compose.dev.yml   udvikling: 127.0.0.1:8080
-  docker-compose.prod.yml  produktion: 127.0.0.1:8081, data i /srv/prod-data
+  docker-compose.yml       basis til udvikling, udstiller ingen port
+  docker-compose.dev.yml   udvikling: 127.0.0.1:8080, lægges oven på basis
+  docker-compose.prod.yml  produktion, STÅR ALENE: 127.0.0.1:8081, /srv/prod-data
   Dockerfile.api           python 3.12, pinnet, kører som uid 10001
   Dockerfile.web           node bygger, nginx serverer, kører som uid 101
   api/
@@ -139,21 +139,37 @@ Hele listen med begrundelser står i guiden:
 
 | | Udvikling | Produktion |
 | --- | --- | --- |
-| Compose-projekt | `docker-compose.yml` plus `docker-compose.dev.yml` | `docker-compose.yml` plus `docker-compose.prod.yml` |
+| Compose-projekt | `docker-compose.yml` plus `docker-compose.dev.yml` | `docker-compose.prod.yml` alene |
 | Adresse | `127.0.0.1:8080` | `127.0.0.1:8081` |
 | Data | `./data` i repoet | `/srv/prod-data` |
 | Genstart | nej | `unless-stopped` |
 | Sundhedstjek | `/healthz` | `/healthz`, pollet af udgivelsen i op til 60 sekunder |
 
-Docker compose lægger portlister sammen i stedet for at erstatte dem. Derfor udstiller
-`docker-compose.yml` ingen port overhovedet, og hver af de to overlay-filer sætter sin
-egen. Preview og produktion kan køre samtidig, og prøven
-`test_det_flettede_dev_binder_kun_8080_og_prod_kun_8081` måler det flettede resultat og
-ikke kun filerne hver for sig.
+Docker compose fletter felt for felt med hver sin regel: `ports` og `volumes` lægges
+sammen, og en arvet liste kan kun erstattes med YAML-taggene `!override` og `!reset`, som
+agentens eget compose-værn afviser. Derfor **står produktionsfilen alene**. Den gentager
+det meste af basis-filen, og det er med vilje: en produktion skal kunne læses i sin
+helhed i én fil. Prøven `test_produktionsfilen_kan_staa_alene` holder øje med, at den
+faktisk har alt, og `test_de_to_miljoeer_deler_ingen_vaertsport` med, at preview og
+produktion kan køre samtidig.
 
-`/srv/prod-data` ejes af root og ikke af den bruger, kundens AI kører som, så produktionen
-ikke kan slettes af et uheld i workspacet. Mappen skal tilhøre `10001:10001` med
-rettighederne 750, for det er den bruger, api-billedet kører som.
+`docker-compose.yml` udstiller stadig ingen port. Ellers ville et ældre repo uden
+`docker-compose.dev.yml` ikke kunne starte preview på den rigtige port.
+
+`/srv/prod-data` ejes af `10001:10001` med rettighederne 750, for det er den bruger,
+api-billedet kører som. Den er IKKE ejet af den bruger kundens AI kører som, så
+produktionen ikke kan slettes af et uheld i workspacet.
+
+### Appens egne hemmeligheder
+
+Skal appen bruge en rigtig ekstern nøgle (mail, betaling), ligger den i
+`/srv/prod-env/app.env` på VM'en. Filen er `root:ws` med rettighederne 640: appen kan
+læse den, og kundens AI kan ikke ændre den. En operatør fra ufi-tech skriver den; der er
+ingen vej til den fra et værktøj.
+
+`/srv/prod-build` er et frisk git-worktree ved hver udgivelse, så hverken en `.env` i
+projektmappen eller en fil uden for git overlever en udgivelse. Derfor ligger filen uden
+for repoet.
 
 Sessionshemmeligheden læses fra `SESSION_HEMMELIGHED`, hvis den er sat. Ellers laver appen
 selv en og gemmer den i datamappen med rettighederne 600, så alle ikke bliver logget ud
