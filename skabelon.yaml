@@ -6,7 +6,7 @@
 # sige det samme; prøven tests/test_skabelon.py holder øje med denne side.
 
 navn: site-basis
-version: 0.1.0
+version: 0.1.1
 
 beskrivelse: >-
   React 18 og Vite i web/, FastAPI og SQLite i api/, login med session i en cookie, og

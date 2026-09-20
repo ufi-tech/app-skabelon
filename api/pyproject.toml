@@ -1,6 +1,6 @@
 [project]
 name = "app-skabelon-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "API-delen af skabelonen site-basis: FastAPI, SQLite og sessionslogin."
 requires-python = ">=3.12"
 dependencies = [

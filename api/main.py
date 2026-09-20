@@ -21,7 +21,7 @@ indstillinger = hent()
 
 app = FastAPI(
     title="site-basis",
-    version="0.1.0",
+    version="0.1.1",
     description="API til skabelonen site-basis.",
     docs_url="/api/docs" if indstillinger.er_udvikling else None,
     redoc_url=None,

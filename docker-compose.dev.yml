@@ -1,0 +1,19 @@
+# Udvikling. Lægges OVEN PÅ docker-compose.yml og kører som projektet ws-dev.
+#
+# Filen findes, fordi docker fletter `ports` ved at lægge sammen og ikke ved at erstatte.
+# Stod preview-porten i basis-filen, ville produktionen (docker-compose.yml plus
+# docker-compose.prod.yml) udstille både 8080 og 8081, og de to miljøer kunne ikke køre
+# samtidig. Hver port står derfor i sin egen overlay-fil.
+#
+# Filen gentager mem_limit, pids_limit og user med vilje: agenten validerer HVER
+# compose-fil for sig, før den lader docker flette dem, så en overlay-fil skal kunne stå
+# alene og stadig overholde reglerne.
+
+services:
+  web:
+    ports:
+      - "127.0.0.1:8080:8080"
+    user: "101:101"
+    restart: "no"
+    mem_limit: 256m
+    pids_limit: 128

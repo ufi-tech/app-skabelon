@@ -14,8 +14,16 @@ import pytest
 import yaml
 from stier import REPO
 
-DEV = REPO / "docker-compose.yml"
-PROD = REPO / "docker-compose.prod.yml"
+BASIS = REPO / "docker-compose.yml"
+DEV_OVERLAY = REPO / "docker-compose.dev.yml"
+PROD_OVERLAY = REPO / "docker-compose.prod.yml"
+
+#: De to projekter, praecis som workspace_agent/docker.py COMPOSE_FILER starter dem.
+DEV_FILER = (BASIS, DEV_OVERLAY)
+PROD_FILER = (BASIS, PROD_OVERLAY)
+
+#: Alle filer, hver for sig. Agenten validerer dem enkeltvis foer den fletter.
+ALLE = (BASIS, DEV_OVERLAY, PROD_OVERLAY)
 
 #: Den eneste adresse en port må bindes til.
 LOOPBACK = "127.0.0.1"
@@ -49,7 +57,30 @@ def _tjenester(sti) -> dict[str, dict[str, Any]]:
     return tjenester
 
 
-@pytest.mark.parametrize("sti", [DEV, PROD], ids=["dev", "prod"])
+def _flettede_porte(stier, tjeneste: str) -> list[str]:
+    """Docker Compose-flettereglen for `ports`, skrevet ned.
+
+    Compose slår overlay-filer sammen ved at LÆGGE ports SAMMEN på nøglen
+    target+published+host_ip+protocol, ikke ved at erstatte listen. Prøven kan ikke køre
+    `docker compose config` (docker er ikke en afhængighed af skabelonen), så reglen står
+    her i stedet. Se docs: "ports ... are merged by appending".
+    """
+    ud: list[str] = []
+    for sti in stier:
+        for post in _tjenester(sti).get(tjeneste, {}).get("ports") or []:
+            tekst = str(post)
+            if tekst not in ud:
+                ud.append(tekst)
+    return ud
+
+
+def _vaertsport(post: str) -> str:
+    """'127.0.0.1:8080:8080' -> '127.0.0.1:8080'."""
+    dele = post.split(":")
+    return ":".join(dele[:-1])
+
+
+@pytest.mark.parametrize("sti", ALLE, ids=["basis", "dev", "prod"])
 def test_hver_tjeneste_har_lofter_og_en_bruger(sti) -> None:
     """mem_limit, pids_limit og user på hver tjeneste, i BEGGE filer.
 
@@ -63,7 +94,7 @@ def test_hver_tjeneste_har_lofter_og_en_bruger(sti) -> None:
         assert "0:0" not in str(tjeneste["user"]), f"{navn} kører som root"
 
 
-@pytest.mark.parametrize("sti", [DEV, PROD], ids=["dev", "prod"])
+@pytest.mark.parametrize("sti", ALLE, ids=["basis", "dev", "prod"])
 def test_porte_er_bundet_til_loopback(sti) -> None:
     for navn, tjeneste in _tjenester(sti).items():
         for post in tjeneste.get("ports") or []:
@@ -72,7 +103,7 @@ def test_porte_er_bundet_til_loopback(sti) -> None:
             assert len(tekst.split(":")) == 3, f"{navn} i {sti.name} mangler en værtsadresse"
 
 
-@pytest.mark.parametrize("sti", [DEV, PROD], ids=["dev", "prod"])
+@pytest.mark.parametrize("sti", ALLE, ids=["basis", "dev", "prod"])
 def test_ingen_farlige_noegler(sti) -> None:
     for navn, tjeneste in _tjenester(sti).items():
         for noegle in FORBUDT:
@@ -83,26 +114,50 @@ def test_ingen_farlige_noegler(sti) -> None:
             assert "docker.sock" not in str(bind)
 
 
-def test_dev_binder_8080_og_prod_binder_8081() -> None:
-    dev = _tjenester(DEV)["web"]["ports"]
-    prod = _tjenester(PROD)["web"]["ports"]
-    assert dev == ["127.0.0.1:8080:8080"], "preview forventer 127.0.0.1:8080"
-    assert prod == ["127.0.0.1:8081:8080"], "udgivelsens sundhedstjek forventer 127.0.0.1:8081"
+def test_basis_udstiller_ingen_porte() -> None:
+    """Basis-filen maa ikke publicere noget.
+
+    Docker fletter `ports` ved at laegge sammen (noeglen er
+    target+published+host_ip+protocol), ikke ved at erstatte. Stod preview-porten i
+    basis-filen, ville produktionen faa BEGGE porte.
+    """
+    for navn, tjeneste in _tjenester(BASIS).items():
+        assert not tjeneste.get("ports"), f"{navn} i {BASIS.name} publicerer en port"
+
+
+def test_det_flettede_dev_binder_kun_8080_og_prod_kun_8081() -> None:
+    """Måler det FLETTEDE resultat, ikke de to filer hver for sig.
+
+    Den gamle prøve målte kun hver fil alene og gav derfor falsk tryghed: den ville stå
+    grøn, selv hvis produktionen endte med både 8080 og 8081 og dermed slog preview ihjel.
+    """
+    assert _flettede_porte(DEV_FILER, "web") == ["127.0.0.1:8080:8080"]
+    assert _flettede_porte(PROD_FILER, "web") == ["127.0.0.1:8081:8080"]
+    assert _flettede_porte(DEV_FILER, "api") == []
+    assert _flettede_porte(PROD_FILER, "api") == []
+
+
+def test_de_to_miljoeer_deler_ingen_vaertsport() -> None:
+    """Preview og produktion skal kunne køre samtidig på den samme VM."""
+    dev = {_vaertsport(p) for p in _flettede_porte(DEV_FILER, "web")}
+    prod = {_vaertsport(p) for p in _flettede_porte(PROD_FILER, "web")}
+    assert dev and prod
+    assert not (dev & prod), f"preview og produktion deler værtsporten {dev & prod}"
 
 
 def test_dev_starter_ikke_sig_selv_igen() -> None:
-    for navn, tjeneste in _tjenester(DEV).items():
+    for navn, tjeneste in _tjenester(BASIS).items():
         genstart = str(tjeneste.get("restart") or "").lower()
         assert genstart not in ("always", "unless-stopped"), f"{navn} må ikke genstarte i dev"
 
 
 def test_produktionen_gemmer_data_uden_for_hjemmemappen() -> None:
-    api = _tjenester(PROD)["api"]
+    api = _tjenester(PROD_OVERLAY)["api"]
     assert "/srv/prod-data:/app/data" in [str(b) for b in api["volumes"]]
 
 
 def test_netvaerket_er_navngivet_med_et_kendt_subnet() -> None:
-    for sti in (DEV, PROD):
+    for sti in (BASIS, PROD_OVERLAY):
         netvaerk = _laes(sti).get("networks") or {}
         assert netvaerk, f"{sti.name} mangler et navngivet netværk"
         for navn, definition in netvaerk.items():
@@ -116,7 +171,7 @@ def test_netvaerket_er_navngivet_med_et_kendt_subnet() -> None:
 
 def test_byggetrinnet_kender_proxyen() -> None:
     """Containere kan ikke nå VM'ens loopback. Proxyen skal stå som byggeargument."""
-    for navn, tjeneste in _tjenester(DEV).items():
+    for navn, tjeneste in _tjenester(BASIS).items():
         byg = tjeneste.get("build")
         assert isinstance(byg, dict), f"{navn} bygger ikke fra en Dockerfile i repoet"
         argumenter = byg.get("args") or {}

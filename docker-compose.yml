@@ -1,13 +1,23 @@
-# Udvikling. Preview binder 127.0.0.1:8080, og det er den eneste port der er åben.
+# Basis. Filen står ALENE under preview sammen med docker-compose.dev.yml, og under
+# docker-compose.prod.yml i produktion.
 #
-# HVORFOR FILEN SER SÅDAN UD:
+# HVORFOR DER IKKE STÅR `ports` HER:
+#
+# Docker fletter `ports` ved at lægge sammen, ikke ved at erstatte (nøglen er
+# target+published+host_ip+protocol, og 8080 er ikke 8081). Stod preview-porten i den her
+# fil, ville `-f docker-compose.yml -f docker-compose.prod.yml` udstille BÅDE 8080 og 8081
+# på web: preview og produktion kunne ikke køre samtidig, og kom produktionen først,
+# ville preview-tunnelen lydløst pege på produktionen. Derfor står hver port i sin egen
+# overlay-fil, og basis udstiller ingenting.
+#
+# HVORFOR RESTEN AF FILEN SER SÅDAN UD:
 #
 # - `mem_limit` og `pids_limit` står på hver tjeneste. Uden dem afviser agentens
 #   compose-værn filen, og uden dem kan én container tage hele maskinens hukommelse
 #   eller proces-tabel.
 # - `user` står på hver tjeneste. Containeren kører aldrig som root.
-# - Porten er bundet til 127.0.0.1. Trafikken kommer ind gennem tunnelen og ingen
-#   andre steder fra.
+# - Porten i overlay-filerne er bundet til 127.0.0.1. Trafikken kommer ind gennem
+#   tunnelen og ingen andre steder fra.
 # - Netværket er navngivet og har et kendt subnet inde i 172.20.0.0/16. Brandmuren i
 #   VM'en tillader netop det område container til container og videre til proxyen.
 # - Proxyen står både som miljø og som byggeargument. En container kan ikke nå VM'ens
@@ -50,8 +60,6 @@ services:
         NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,api,web,172.20.0.0/16,10.77.0.0/24}
     depends_on:
       - api
-    ports:
-      - "127.0.0.1:8080:8080"
     user: "101:101"
     restart: "no"
     mem_limit: 256m

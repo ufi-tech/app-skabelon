@@ -11,7 +11,8 @@ Alt i repoet er tænkt som noget, der skal rettes i. Det er meningen, at du bygg
 ```
 app-skabelon/
   skabelon.yaml            navn, version, gate-trin og egress-domæner
-  docker-compose.yml       udvikling: 127.0.0.1:8080
+  docker-compose.yml       basis, udstiller ingen port
+  docker-compose.dev.yml   udvikling: 127.0.0.1:8080
   docker-compose.prod.yml  produktion: 127.0.0.1:8081, data i /srv/prod-data
   Dockerfile.api           python 3.12, pinnet, kører som uid 10001
   Dockerfile.web           node bygger, nginx serverer, kører som uid 101
@@ -138,15 +139,17 @@ Hele listen med begrundelser står i guiden:
 
 | | Udvikling | Produktion |
 | --- | --- | --- |
-| Compose-projekt | `docker-compose.yml` | samme plus `docker-compose.prod.yml` |
+| Compose-projekt | `docker-compose.yml` plus `docker-compose.dev.yml` | `docker-compose.yml` plus `docker-compose.prod.yml` |
 | Adresse | `127.0.0.1:8080` | `127.0.0.1:8081` |
 | Data | `./data` i repoet | `/srv/prod-data` |
 | Genstart | nej | `unless-stopped` |
 | Sundhedstjek | `/healthz` | `/healthz`, pollet af udgivelsen i op til 60 sekunder |
 
-Så længe docker compose lægger portlister sammen i stedet for at erstatte dem, udstiller
-produktionsprojektet også 127.0.0.1:8080. Stop derfor preview, før du udgiver, indtil
-ufi-tech har rettet det i agenten.
+Docker compose lægger portlister sammen i stedet for at erstatte dem. Derfor udstiller
+`docker-compose.yml` ingen port overhovedet, og hver af de to overlay-filer sætter sin
+egen. Preview og produktion kan køre samtidig, og prøven
+`test_det_flettede_dev_binder_kun_8080_og_prod_kun_8081` måler det flettede resultat og
+ikke kun filerne hver for sig.
 
 `/srv/prod-data` ejes af root og ikke af den bruger, kundens AI kører som, så produktionen
 ikke kan slettes af et uheld i workspacet. Mappen skal tilhøre `10001:10001` med
